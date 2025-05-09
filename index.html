@@ -1,0 +1,1210 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="utf-8" />
+  <title>Vozes da Babitonga</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+  <!-- Pré-carregar recursos importantes -->
+  <link rel="preconnect" href="https://tile.openstreetmap.org">
+  <link rel="preconnect" href="https://server.arcgisonline.com">
+  <link rel="preconnect" href="https://mt1.google.com">
+
+  <style>
+    body,
+    html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: Arial, sans-serif;
+      overflow: hidden;
+    }
+
+    /* Layout principal com CSS Grid */
+    body {
+      display: grid;
+      grid-template-columns: 60% 40%;
+      grid-template-rows: 1fr;
+      height: 100vh;
+    }
+
+    #form-container {
+      grid-column: 1;
+      overflow-y: auto;
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.95);
+      transition: background-color 0.3s ease;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #map {
+      grid-column: 2;
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      position: relative;
+      z-index: 5;
+    }
+
+    /* Layout para mobile */
+    @media (max-width: 768px) {
+      body {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+      }
+
+      #form-container {
+        grid-column: 1;
+        grid-row: 1;
+      }
+
+      #map {
+        grid-column: 1;
+        grid-row: 2;
+        height: 40vh;
+      }
+    }
+
+    #data-form {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: min-content;
+    }
+
+    #titulo {
+      background-color: #01db87;
+      color: white;
+      padding: 12px 15px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+      text-align: center;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      top: 0;
+      z-index: 10;
+    }
+
+    .leaflet-container {
+      background-color: transparent !important;
+      outline: none !important;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Cores para as diferentes dimensões */
+    .bg-ambiental {
+      background: rgba(210, 245, 210, 0.95) !important;
+    }
+
+    .bg-social {
+      background: rgba(255, 218, 185, 0.95) !important;
+    }
+
+    .bg-politica {
+      background: rgba(221, 210, 247, 0.95) !important;
+    }
+
+    .bg-economica {
+      background: rgba(153, 209, 226, 0.95) !important;
+    }
+
+    .form-field {
+      margin-bottom: 20px;
+    }
+
+    .form-field label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: bold;
+      font-size: 15px;
+    }
+
+    .form-field input,
+    .form-field select,
+    .form-field textarea {
+      width: 100%;
+      padding: 12px;
+      box-sizing: border-box;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 15px;
+      transition: border-color 0.3s ease;
+      font-family: Arial, sans-serif;
+    }
+
+    .form-field textarea {
+      min-height: 80px;
+      resize: none;
+      overflow-y: hidden;
+      line-height: 1.5;
+    }
+
+    .form-field input:focus,
+    .form-field select:focus,
+    .form-field textarea:focus {
+      border-color: #0078D4;
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.2);
+    }
+
+    button {
+      background: #0078D4;
+      color: white;
+      border: none;
+      padding: 14px 15px;
+      cursor: pointer;
+      width: 100%;
+      border-radius: 6px;
+      font-weight: bold;
+      margin-top: 15px;
+      font-size: 16px;
+      transition: background 0.3s, transform 0.2s;
+    }
+
+    button:hover {
+      background: #005a9e;
+      transform: translateY(-1px);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button:disabled {
+      background: #cccccc;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .loading {
+      position: relative;
+      pointer-events: none;
+    }
+
+    .loading::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: spin 1s ease-in-out infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: translate(-50%, -50%) rotate(360deg);
+      }
+    }
+
+    #selected-grids {
+      margin: 15px 0;
+      padding: 12px;
+      background: #e9f7fe;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    #status-message {
+      margin-top: 15px;
+      padding: 12px;
+      border-radius: 6px;
+      display: none;
+      font-size: 14px;
+    }
+
+    .success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+
+    .error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+
+    /* Modal de Boas-Vindas */
+    #welcome-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 2000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: auto;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+
+    .modal-content {
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      max-width: 90%;
+      width: 100%;
+      text-align: justify;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+      box-sizing: border-box;
+      margin: auto;
+      position: relative;
+    }
+
+    #start-mapping-btn {
+      background: #0078D4;
+      color: white;
+      border: none;
+      padding: 14px 30px;
+      font-size: 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-top: 20px;
+      transition: background 0.3s, transform 0.2s;
+    }
+
+    #start-mapping-btn:hover {
+      background: #005a9e;
+      transform: translateY(-2px);
+    }
+
+    .required-field {
+      padding-top: 10px;
+    }
+
+    .required-field::after {
+      content: " *";
+      color: red;
+    }
+
+    /* Estilo para o ícone de informação */
+    .info-icon {
+      color: #0078D4;
+      margin-left: 5px;
+      cursor: pointer;
+      font-size: 26px;
+    }
+
+    .info-text {
+      font-size: 12px;
+      color: #666;
+      margin-left: 5px;
+    }
+
+    /* Estilo para o modal de informações */
+    #info-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 2001;
+      display: none;
+      justify-content: center;
+      align-items: center;
+      overflow: auto;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+
+    .info-modal-content {
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      max-width: 600px;
+      width: 90%;
+      text-align: justify;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+      box-sizing: border-box;
+      margin: auto;
+      position: relative;
+    }
+
+    .info-modal-content h2 {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #0078D4;
+    }
+
+    .info-modal-content p {
+      margin-bottom: 15px;
+      line-height: 1.6;
+    }
+
+    .info-modal-content ol {
+      padding-left: 20px;
+    }
+
+    .info-modal-content li {
+      margin-bottom: 15px;
+    }
+
+    .responsive-image-container {
+      display: flex;
+      justify-content: center;
+      width: 100%;
+      margin: 15px 0;
+    }
+
+    .responsive-image {
+      width: 100%;
+      height: auto;
+      display: block;
+      max-width: 100%;
+    }
+
+    /* Telas médias (tablets/laptops) */
+    @media (min-width: 768px) {
+      .responsive-image {
+        max-width: 70%;
+      }
+    }
+
+    /* Telas grandes (desktops) */
+    @media (min-width: 1200px) {
+      .responsive-image {
+        max-width: 50%;
+      }
+    }
+
+    #close-info-btn {
+      background: #0078D4;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      font-size: 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-top: 20px;
+      display: block;
+      width: 100%;
+      transition: background 0.3s;
+    }
+
+    #close-info-btn:hover {
+      background: #005a9e;
+    }
+
+    /* Melhorias para mobile */
+    @media (max-width: 600px) {
+      #titulo {
+        background-color: #0078D4;
+        border-radius: 6px;
+        font-size: 13px;
+        padding: 8px 15px;
+        margin: 0 0 10px 0;
+        text-align: center;
+        z-index: 100;
+      }
+
+      #selected-grids {
+        margin: 0 0 5px 0;
+        padding: 8px;
+      }
+
+      button {
+        padding: 10px 10px;
+        cursor: pointer;
+        width: 100%;
+        border-radius: 4px;
+        font-weight: bold;
+        margin-top: 10px;
+        font-size: 13px;
+      }
+
+      .form-field input,
+      .form-field select,
+      .form-field textarea {
+        padding: 10px;
+        font-size: 14px;
+        margin: auto;
+      }
+
+      .form-field textarea {
+        min-height: 70px;
+      }
+
+      .modal-content,
+      .info-modal-content {
+        padding: 20px;
+        max-width: 95%;
+      }
+
+      .modal-content h2,
+      .info-modal-content h2 {
+        text-align: center;
+        padding: auto;
+      }
+
+      #welcome-modal,
+      #info-modal {
+        padding: 10px;
+        align-items: flex-start;
+      }
+
+      .info-icon {
+        font-size: 14px;
+      }
+
+      .info-text {
+        font-size: 11px;
+      }
+    }
+
+    @media (max-height: 500px) {
+      #titulo {
+        font-size: 8px;
+        padding: 8px 15px;
+      }
+    }
+
+    /* Estilo para o captcha - Versão otimizada */
+    .captcha-container {
+      margin: 15px 0;
+      padding: 15px;
+      background: #f5f5f5;
+      border-radius: 6px;
+      border: 1px solid #ddd;
+      box-sizing: border-box;
+      width: 100%;
+    }
+
+    .captcha-question {
+      font-weight: bold;
+      margin-bottom: 10px;
+      font-size: 15px;
+      word-break: break-word;
+    }
+
+    .captcha-input {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 15px;
+      box-sizing: border-box;
+      transition: border-color 0.3s ease;
+    }
+
+    .captcha-input:focus {
+      border-color: #0078D4;
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.2);
+    }
+
+    .captcha-error {
+      color: #721c24;
+      font-size: 14px;
+      margin-top: 8px;
+      display: none;
+      background: #f8d7da;
+      padding: 8px 12px;
+      border-radius: 4px;
+      border: 1px solid #f5c6cb;
+    }
+
+    /* Ajustes específicos para mobile */
+    @media (max-width: 768px) {
+      .captcha-container {
+        margin: 10px 0;
+        padding: 12px;
+      }
+
+      .captcha-question {
+        font-size: 14px;
+        margin-bottom: 8px;
+      }
+
+      .captcha-input {
+        padding: 10px;
+        font-size: 14px;
+      }
+
+      .captcha-error {
+        font-size: 13px;
+        padding: 6px 10px;
+      }
+    }
+
+    /* Ajustes para telas muito pequenas */
+    @media (max-width: 480px) {
+      .captcha-container {
+        padding: 10px;
+      }
+
+      .captcha-question {
+        font-size: 13px;
+      }
+    }
+
+    /* Estilo para o indicador de carregamento */
+    #map-loading {
+      position: fixed;
+      /* Garante que a posição seja fixa na tela */
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 1000;
+      background: rgba(0, 0, 0, 0.8);
+      padding: 20px 30px;
+      border-radius: 10px;
+      display: flex;
+      /* Adicionado para centralizar o conteúdo */
+      flex-direction: column;
+      /* Para alinhar o texto e o spinner verticalmente */
+      justify-content: center;
+      /* Centraliza horizontalmente */
+      align-items: center;
+      /* Centraliza verticalmente */
+      text-align: center;
+      color: white;
+      font-size: 18px;
+      font-weight: bold;
+      animation: pulse 1.5s infinite;
+    }
+
+    /* Animação de pulsação */
+    @keyframes pulse {
+      0% {
+        transform: translate(-50%, -50%) scale(1);
+      }
+
+      50% {
+        transform: translate(-50%, -50%) scale(1.1);
+      }
+
+      100% {
+        transform: translate(-50%, -50%) scale(1);
+      }
+    }
+
+    /* Spinner de carregamento */
+    .loading-spinner {
+      margin-top: 10px;
+      width: 30px;
+      height: 30px;
+      border: 4px solid rgba(255, 255, 255, 0.3);
+      border-top: 4px solid white;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    /* Animação de rotação */
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Modal de Boas-Vindas -->
+  <div id="welcome-modal">
+    <div class="modal-content">
+      <h2>📍Bem-vindo ao Projeto Mapeamento dos usos da baía da Babitonga - SC🌏</h2>
+
+      <p>Olá!</p>
+
+      <p>Neste primeiro formulário iremos identificar os principais desafios e potencialidades referentes aos usos dos
+        territórios da baía da Babitonga (ou baía Babitonga, se preferir).</p>
+
+      <p>Este formulário estará disponível até o dia 01 de agosto de 2025. Após esta data, a equipe do projeto terá 60
+        dias para analisar todas as respostas enviadas. Feito isto, será lançada uma segunda rodada onde haverá uma
+        enquete de múltipla escolha contendo os temas mais mencionados nesta primeira enquete.</p>
+
+      <p>Na segunda rodada que será lançada no dia 01 de outubro de 2025, você deverá escolher a ação que considera
+        prioritária no que diz respeito ao uso do território do seu município nas proximidades da Babitonga. Você terá
+        outros 30 dias para responder esta segunda enquete (até o dia 01 de novembro de 2025).</p>
+
+      <p>Os resultados da segunda rodada serão ranqueados, buscando deixar claro para o Governo de Santa Catarina quais
+        são as ações prioritárias que devem ser resolvidas pelo poder público.</p>
+
+      <div id="selected-grids">
+
+        Este aplicativo atende as exigências da Lei Geral de Proteção de Dados (LGPD, Lei nº 13.709/2018). O sigilo das
+        suas informações é garantido, mas é dever do informante fornecer dados verdadeiros, sob pena de responsabilidade
+        penal por falsa comunicação (art. 299 do Código Penal).
+        <br><br>
+        Dúvidas podem ser encaminhadas à Universidade do Estado de Santa Catarina (UDESC) através do e-mail
+        'eduardo.gentil@udesc.br'. Qualquer uso indevido pode ser reportado às autoridades competentes.
+        <br><br>
+        Ao clicar em 'PARTICIPAR DA PRIMEIRA RODADA', você concorda que suas respostas anônimas poderão ser utilizadas
+        para fins técnicos, estatísticos e científicos, garantida a não identificação pessoal.
+
+      </div>
+
+
+      <p>Obrigado por ajudar a construir o futuro da Babitonga.</p>
+
+      <!-- Imagem responsiva adicionada aqui -->
+      <div class="responsive-image-container">
+        <img src="img/semae_udesc.png" alt="Descrição da imagem" class="responsive-image">
+      </div>
+
+      <button id="start-mapping-btn">PARTICIPAR DA PRIMEIRA RODADA</button>
+    </div>
+  </div>
+
+  <!-- Modal de Informações sobre Dimensões -->
+  <div id="info-modal">
+    <div class="info-modal-content">
+      <h2>4 DIMENSÕES</h2>
+      <p>O "Método Babitonga: uma outra abordagem ecossistêmica", pressupõe a ampla e anônima participação popular na
+        resolução das 4 dimensões contempladas para a boa gestão do território, a saber: dimensão ambiental, dimensão
+        social, dimensão política e dimensão econômica.</p>
+
+      <ol>
+        <li><strong>Dimensão ambiental:</strong> Nesta dimensão consideramos como está a situação dos ambientes naturais
+          da Babitonga que estão no seu município, exemplo: água, solo, fauna e flora, destacando quais os eventuais
+          riscos que a natureza possa estar correndo por conta da ação humana;</li>
+
+        <li><strong>Dimensão social:</strong> Consiste em descrever como as comunidades que vivem ao redor da Babitonga
+          no seu município se encontram em termos de saúde, educação, segurança alimentar, condições de vida e proteção;
+        </li>
+
+        <li><strong>Dimensão política:</strong> Consiste no seu entendimento acerca da inclusão da comunidade do seu
+          município nas tomadas de decisões que envolvem o uso e gestão da Babitonga. Como você considera a participação
+          comunitária, a transparência, o respeito ao estado de direito, a voz e a influência política das comunidades
+          do seu município em relação a Babitonga?</li>
+
+        <li><strong>Dimensão econômica:</strong> Nesta dimensão consideramos os desafios e potencialidades para a
+          geração de riqueza econômica e oportunidades de trabalho nas áreas do seu município que estão próximas da
+          Babitonga.</li>
+      </ol>
+
+      <button id="close-info-btn">FECHAR</button>
+    </div>
+  </div>
+
+  <!-- Formulário -->
+  <div id="form-container" style="display: none;">
+    <form id="data-form" method="POST"
+      action="https://script.google.com/macros/s/AKfycbwGc7iAyAb8DYMkqNFgJYLRv6KN_hS74tfjur9Byd5O3saX4q5SBqk27vZ3Rb_gU0o4/exec"
+      target="hidden-iframe">
+      <input type="hidden" name="resposta01" id="resposta01-input">
+      <input type="hidden" name="resposta02" id="resposta02-input">
+      <input type="hidden" name="resposta03" id="resposta03-input">
+      <input type="hidden" name="resposta04" id="resposta04-input">
+      <input type="hidden" name="resposta05" id="resposta05-input">
+      <input type="hidden" name="id_grid" id="id-grid-input">
+      <input type="hidden" name="dimensao" id="dimensao-input">
+      <input type="hidden" name="cidade" id="cidade-input">
+      <input type="hidden" name="setor" id="setor-input">
+
+      <div class="form-field">
+        <p id="titulo"><b>Formulário - Primeira rodada</b></p>
+
+        <!-- Novo campo: Cidade -->
+        <label for="cidade" class="required-field">Selecione sua cidade:</label>
+        <select id="cidade" required>
+          <option value="">Selecione...</option>
+          <option value="Garuva">Garuva</option>
+          <option value="Itapoá">Itapoá</option>
+          <option value="Joinville">Joinville</option>
+          <option value="São Francisco do Sul">São Francisco do Sul</option>
+          <option value="Balneário Barra do Sul">Balneário Barra do Sul</option>
+          <option value="Araquari">Araquari</option>
+        </select>
+
+        <!-- Novo campo: Setor -->
+        <label for="setor" class="required-field">Selecione seu setor:</label>
+        <select id="setor" required>
+          <option value="">Selecione...</option>
+          <option value="Academia">Instituição de Ensino e/ou Pesquisa</option>
+          <option value="Serviço Público">Setor Público</option>
+          <option value="Serviço Privado">Setor Privado ou Autônomo</option> <!-- Novo campo: Setor -->
+          <option value="Setor Empresarial ou Industrial">Setor Empresarial ou Industrial</option>
+          <option value="Comunidade Tradicional">Povos e Comunidades Tradicionais</option>
+          <option value="Sociedade Civil Organizada">Sociedade Civil Organizada</option>
+          <option value="Outros">Outros</option>
+        </select>
+
+        <!-- Campo existente de dimensão -->
+        <label for="dimensao" class="required-field">Clique na barra abaixo e escolha uma das 4 dimensões:</label>
+        <select id="dimensao" required>
+          <option value="">Selecione...</option>
+          <option value="Ambiental">Ambiental</option>
+          <option value="Social">Social</option>
+          <option value="Política">Política</option>
+          <option value="Economica">Econômica</option>
+        </select>
+      </div>
+
+      <div id="selected-grids">
+        Agora que você escolheu uma das dimensões, responda as 5 questões abaixo:
+        <i class="fas fa-info-circle info-icon" title="Clique para mais informações"></i>
+        <span class="info-text">(Clique para mais informações)</span>
+      </div>
+
+      <div class="form-field">
+        <label for="resposta01" class="required-field">Quais são os problemas que você gostaria de apontar para a
+          dimensão selecionada?</label>
+        <textarea id="resposta01" rows="3" required></textarea>
+      </div>
+
+      <div class="form-field">
+        <label for="resposta02" class="required-field">Na sua opinião, quais são os principais impactos decorrentes
+          destes problemas?</label>
+        <textarea id="resposta02" rows="3" required></textarea>
+      </div>
+
+      <div class="form-field">
+        <label for="resposta03" class="required-field">Como você sugere que eles podem ser resolvidos?</label>
+        <textarea id="resposta03" rows="3" required></textarea>
+      </div>
+
+      <div class="form-field">
+        <label for="resposta04" class="required-field">Quem são os principais envolvidos na geração dos problemas para a
+          dimensão selecionada?</label>
+        <textarea id="resposta04" rows="3" required></textarea>
+      </div>
+
+      <div class="form-field">
+        <label for="resposta05" class="required-field">Quais são os pontos positivos ou possibilidades para a dimensão
+          selecionada?</label>
+        <textarea id="resposta05" rows="3" required></textarea>
+      </div>
+
+      <div id="selected-grids">
+        <b>🌏 Aponte nas caixinhas do mapa onde estão os problemas que você identificou na Baía da Babitonga. Selecione
+          pelo menos 1 caixinha:</b>
+      </div>
+
+      <div id="selected-grids">
+        📢 Após escolher as caixinhas, clique em <b>ENVIAR RESPOSTAS DESTA DIMENSÃO.</b> Escolha uma nova dimensão e
+        continue respondendo a enquete.
+      </div>
+
+      <div id="selected-grids">
+        📍 Locais selecionados: <span id="selected-count">0</span> <span class="required-field"></span>
+      </div>
+
+      <!-- Container do CAPTCHA -->
+      <div class="captcha-container">
+        <div class="captcha-question">Por favor, resolva: <span id="captcha-question"></span> = ?</div>
+        <input type="text" id="captcha-answer" class="captcha-input" placeholder="Digite a resposta" required>
+        <div id="captcha-error" class="captcha-error">Resposta incorreta. Por favor, tente novamente.</div>
+      </div>
+
+      <div id="status-message"></div>
+      <iframe name="hidden-iframe" id="hidden-iframe" style="display:none;"></iframe>
+
+      <button type="submit" id="submit-btn">ENVIAR RESPOSTAS DESTA DIMENSÃO</button>
+    </form>
+  </div>
+
+  <!-- Adicione um indicador de carregamento ao mapa com estilo atualizado -->
+  <div id="map-loading">
+    <div>Carregando dados...</div>
+    <!-- Spinner de carregamento exibido enquanto os dados do mapa são carregados 
+    <div class="loading-spinner"></div>-->
+  </div>
+
+
+
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
+  <script>
+    // Variáveis globais
+    let map;
+    let selectedLayers = [];
+    let gridLayer;
+    let captchaSolution;
+    const welcomeModal = document.getElementById('welcome-modal');
+    const startMappingBtn = document.getElementById('start-mapping-btn');
+    const formContainer = document.getElementById('form-container');
+    const infoModal = document.getElementById('info-modal');
+    const closeInfoBtn = document.getElementById('close-info-btn');
+    const captchaQuestion = document.getElementById('captcha-question');
+    const captchaAnswer = document.getElementById('captcha-answer');
+    const captchaError = document.getElementById('captcha-error');
+
+    // Função para inicializar o mapa (somente quando necessário)
+    function initializeMap() {
+      if (map) return; // Se o mapa já foi inicializado, não faz nada
+
+      // Exibe o indicador de carregamento
+      document.getElementById('map-loading').style.display = 'block';
+
+      map = L.map('map', {
+        touchZoom: true,
+        dragging: true,
+        zoomControl: true
+      }).setView([-26.224909526521635, -48.766241919369364], 11);
+
+      // Limites de zoom
+      map.setMinZoom(10);
+      map.setMaxZoom(16);
+
+      // Camadas base
+      const baseLayers = {
+        "Ruas": L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap contributors',
+          updateWhenIdle: true
+        }),
+        "Esri Satélite": L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+          attribution: 'Tiles &copy; Esri',
+          updateWhenIdle: true
+        }),
+        "Google Satélite": L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+          attribution: 'Google Satellite',
+          updateWhenIdle: true
+        }),
+        "Google Híbrido": L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+          attribution: 'Google Hybrid',
+          updateWhenIdle: true
+        })
+      };
+
+      baseLayers.Ruas.addTo(map);
+      L.control.layers(baseLayers).addTo(map);
+
+      // Inicializa a camada de grid
+      gridLayer = L.layerGroup().addTo(map);
+
+      // Carrega o GeoJSON de forma assíncrona
+      loadGeoJSON('geojson/grid_4674_1km2.geojson').then(() => {
+        // Oculta o indicador de carregamento após o carregamento do GeoJSON
+        document.getElementById('map-loading').style.display = 'none';
+      }).catch(err => {
+        console.error('Erro ao carregar GeoJSON:', err);
+        showStatus('Erro ao carregar os grids', 'error');
+        document.getElementById('map-loading').style.display = 'none';
+      });
+
+      // Ajusta o tamanho do mapa após a inicialização
+      setTimeout(() => {
+        map.invalidateSize({
+          pan: false,
+          animate: false,
+          duration: 0
+        });
+      }, 300);
+    }
+
+    // Função para carregar o GeoJSON de forma assíncrona
+    async function loadGeoJSON(url) {
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+
+        L.geoJSON(data, {
+          style: {
+            color: "#0074D9",
+            weight: 0.5,
+            dashArray: '3',
+            fillOpacity: 0.1
+          },
+          onEachFeature: function (feature, layer) {
+            layer.on('click', function (e) {
+              e.originalEvent.preventDefault();
+              e.originalEvent.stopPropagation();
+              e.originalEvent.stopImmediatePropagation();
+
+              const index = selectedLayers.indexOf(layer);
+              if (index > -1) {
+                selectedLayers.splice(index, 1);
+                layer.setStyle({
+                  fillColor: "#0074D9",
+                  color: "#0074D9",
+                  weight: 0.5,
+                  fillOpacity: 0.1
+                });
+              } else {
+                selectedLayers.push(layer);
+                layer.setStyle({
+                  fillColor: "#FF4136",
+                  color: "#FF4136",
+                  weight: 2,
+                  fillOpacity: 0.5
+                });
+              }
+              updateSelectedCount();
+            });
+          }
+        }).addTo(gridLayer);
+      } catch (err) {
+        console.error('Erro ao carregar GeoJSON:', err);
+        showStatus('Erro ao carregar os grids', 'error');
+      }
+    }
+
+    // Função para gerar uma nova pergunta de captcha
+    function generateCaptcha() {
+      const num1 = Math.floor(Math.random() * 10) + 1;
+      const num2 = Math.floor(Math.random() * 10) + 1;
+      captchaSolution = num1 + num2;
+      captchaQuestion.textContent = `${num1} + ${num2}`;
+      captchaAnswer.value = '';
+      captchaError.style.display = 'none';
+    }
+
+    // Função para ajuste automático da altura dos textareas
+    function autoResizeTextarea(textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = (textarea.scrollHeight) + 'px';
+    }
+
+    // Funções de controle de tela
+    function showMappingScreen() {
+      welcomeModal.style.display = 'none';
+      formContainer.style.display = 'block';
+
+      // Inicializa o mapa somente quando necessário
+      initializeMap();
+
+      // Foca no primeiro campo do formulário
+      setTimeout(() => {
+        document.getElementById('cidade').focus();
+      }, 100);
+    }
+
+    function showWelcomeModal() {
+      welcomeModal.style.display = 'flex';
+      formContainer.style.display = 'none';
+      clearSelection();
+      document.getElementById('data-form').reset();
+      formContainer.classList.remove('bg-ambiental', 'bg-social', 'bg-politica', 'bg-economica');
+
+      document.querySelectorAll('textarea').forEach(textarea => {
+        autoResizeTextarea(textarea);
+      });
+    }
+
+    function updateSelectedCount() {
+      document.getElementById('selected-count').textContent = selectedLayers.length;
+    }
+
+    function showStatus(message, type) {
+      const statusElement = document.getElementById('status-message');
+      statusElement.textContent = message;
+      statusElement.className = type;
+      statusElement.style.display = 'block';
+      setTimeout(() => statusElement.style.display = 'none', 5000);
+    }
+
+    function clearSelection() {
+      selectedLayers.forEach(layer => {
+        layer.setStyle({
+          fillColor: "#0074D9",
+          color: "#0074D9",
+          weight: 0.5,
+          fillOpacity: 0.1
+        });
+      });
+      selectedLayers = [];
+      updateSelectedCount();
+    }
+
+    // Configuração inicial quando o DOM estiver carregado
+    document.addEventListener('DOMContentLoaded', function () {
+      // Mostra o modal imediatamente
+      showWelcomeModal();
+
+      // Gera o primeiro captcha
+      generateCaptcha();
+
+      // Configura os event listeners
+      setupEventListeners();
+
+      // Aplica o ajuste automático a todos os textareas
+      document.querySelectorAll('textarea').forEach(textarea => {
+        textarea.addEventListener('input', function () {
+          autoResizeTextarea(this);
+        });
+        autoResizeTextarea(textarea);
+      });
+    });
+
+    // Configura todos os event listeners
+    function setupEventListeners() {
+      // Evento do botão "Iniciar Mapeamento"
+      startMappingBtn.addEventListener('click', function () {
+        this.classList.add('loading');
+        this.disabled = true;
+
+        // Mostra a tela de mapeamento após um pequeno delay
+        setTimeout(() => {
+          showMappingScreen();
+          this.classList.remove('loading');
+          this.disabled = false;
+        }, 100);
+      });
+
+      // Evento para abrir o modal de informações
+      document.addEventListener('click', function (e) {
+        if (e.target.classList.contains('info-icon') || e.target.closest('.info-icon')) {
+          e.preventDefault();
+          infoModal.style.display = 'flex';
+        }
+      });
+
+      // Evento para fechar o modal de informações
+      closeInfoBtn.addEventListener('click', function () {
+        infoModal.style.display = 'none';
+      });
+
+      // Fechar modal ao clicar fora do conteúdo
+      window.addEventListener('click', function (e) {
+        if (e.target === welcomeModal) {
+          showMappingScreen();
+        }
+        if (e.target === infoModal) {
+          infoModal.style.display = 'none';
+        }
+      });
+
+      // Impede que o clique dentro do modal feche ele
+      document.querySelector('.modal-content').addEventListener('click', function (e) {
+        e.stopPropagation();
+      });
+
+      document.querySelector('.info-modal-content').addEventListener('click', function (e) {
+        e.stopPropagation();
+      });
+
+      // Evento para mudar cor do formulário baseado na dimensão selecionada
+      document.getElementById('dimensao').addEventListener('change', function () {
+        const selectedValue = this.value;
+        formContainer.classList.remove('bg-ambiental', 'bg-social', 'bg-politica', 'bg-economica');
+        switch (selectedValue) {
+          case 'Ambiental': formContainer.classList.add('bg-ambiental'); break;
+          case 'Social': formContainer.classList.add('bg-social'); break;
+          case 'Política': formContainer.classList.add('bg-politica'); break;
+          case 'Economica': formContainer.classList.add('bg-economica'); break;
+        }
+      });
+
+      // Evento de submit do formulário
+      document.getElementById('data-form').addEventListener('submit', function (e) {
+        // Verifica o captcha primeiro
+        const userAnswer = parseInt(captchaAnswer.value);
+        if (isNaN(userAnswer)) {
+          e.preventDefault();
+          captchaError.textContent = 'Por favor, digite um número válido.';
+          captchaError.style.display = 'block';
+          captchaAnswer.focus();
+          return;
+        }
+
+        if (userAnswer !== captchaSolution) {
+          e.preventDefault();
+          captchaError.textContent = 'Resposta incorreta. Por favor, tente novamente.';
+          captchaError.style.display = 'block';
+          captchaAnswer.focus();
+          generateCaptcha(); // Gera uma nova pergunta
+          return;
+        }
+
+        // Restante da validação do formulário
+        if (selectedLayers.length === 0) {
+          e.preventDefault();
+          showStatus('Selecione pelo menos um grid no mapa', 'error');
+          return;
+        }
+
+        const camposObrigatorios = [
+          { id: 'cidade', nome: 'Cidade' },
+          { id: 'setor', nome: 'Setor' },
+          { id: 'dimensao', nome: 'Dimensão' },
+          { id: 'resposta01', nome: 'Pergunta 01' },
+          { id: 'resposta02', nome: 'Pergunta 02' },
+          { id: 'resposta03', nome: 'Pergunta 03' },
+          { id: 'resposta04', nome: 'Pergunta 04' },
+          { id: 'resposta05', nome: 'Pergunta 05' }
+        ];
+
+        for (const campo of camposObrigatorios) {
+          const elemento = document.getElementById(campo.id);
+          if (!elemento.value) {
+            e.preventDefault();
+            showStatus(`Preencha o campo: ${campo.nome}`, 'error');
+            elemento.focus();
+            return;
+          }
+        }
+
+        document.getElementById('resposta01-input').value = document.getElementById('resposta01').value;
+        document.getElementById('resposta02-input').value = document.getElementById('resposta02').value;
+        document.getElementById('resposta03-input').value = document.getElementById('resposta03').value;
+        document.getElementById('resposta04-input').value = document.getElementById('resposta04').value;
+        document.getElementById('resposta05-input').value = document.getElementById('resposta05').value;
+        document.getElementById('id-grid-input').value = selectedLayers.map(layer => layer.feature.properties.id).join(',');
+        document.getElementById('dimensao-input').value = document.getElementById('dimensao').value;
+        document.getElementById('cidade-input').value = document.getElementById('cidade').value;
+        document.getElementById('setor-input').value = document.getElementById('setor').value;
+
+        showStatus('Enviando dados...', 'success');
+        document.getElementById('submit-btn').disabled = true;
+      });
+
+      // Tratamento da resposta do envio
+      document.getElementById('hidden-iframe').onload = function () {
+        try {
+          const iframeDoc = this.contentDocument || this.contentWindow.document;
+          const responseText = iframeDoc.body.textContent || iframeDoc.body.innerText;
+          const result = JSON.parse(responseText);
+
+          if (result.success) {
+            showStatus(`${result.registros} registro(s) salvos com sucesso!`, 'success');
+            document.getElementById('data-form').reset();
+            clearSelection();
+            formContainer.classList.remove('bg-ambiental', 'bg-social', 'bg-politica', 'bg-economica');
+            document.getElementById('submit-btn').disabled = false;
+            document.getElementById('cidade').focus();
+
+            // Gera um novo captcha após o envio bem-sucedido
+            generateCaptcha();
+
+            document.querySelectorAll('textarea').forEach(textarea => {
+              autoResizeTextarea(textarea);
+            });
+
+            setTimeout(() => {
+              document.getElementById('titulo').scrollIntoView({ behavior: 'smooth' });
+              document.getElementById('form-container').scrollTo({ top: 0, behavior: 'smooth' });
+            }, 300);
+          } else {
+            showStatus(`Erro: ${result.error}`, 'error');
+            document.getElementById('submit-btn').disabled = false;
+          }
+        } catch (e) {
+          showStatus('Dados enviados com sucesso! Muito obrigado por sua contribuição.', 'success');
+          document.getElementById('data-form').reset();
+          clearSelection();
+          formContainer.classList.remove('bg-ambiental', 'bg-social', 'bg-politica', 'bg-economica');
+          document.getElementById('submit-btn').disabled = false;
+
+          // Gera um novo captcha após o envio bem-sucedido
+          generateCaptcha();
+
+          document.querySelectorAll('textarea').forEach(textarea => {
+            autoResizeTextarea(textarea);
+          });
+
+          setTimeout(() => {
+            document.getElementById('titulo').scrollIntoView({ behavior: 'smooth' });
+            document.getElementById('form-container').scrollTo({ top: 0, behavior: 'smooth' });
+          }, 300);
+        }
+      };
+    }
+  </script>
+</body>
+
+</html>
